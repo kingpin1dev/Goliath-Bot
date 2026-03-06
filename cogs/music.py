@@ -183,13 +183,18 @@ class Music(commands.Cog):
             if queue.timeout_task:
                 queue.timeout_task.cancel()
                 queue.timeout_task = None
-            
-            player = await YTDLSource.from_url(next_song['url'], loop=self.bot.loop, stream=True, seek_to=seek_to)
-            queue.current = next_song
-            queue.current_position = seek_to
-            voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(
-                self.play_next(guild), self.bot.loop
-            ))
+
+            try:
+                player = await YTDLSource.from_url(next_song['url'], loop=self.bot.loop, stream=True, seek_to=seek_to)
+                queue.current = next_song
+                queue.current_position = seek_to
+                voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(
+                    self.play_next(guild), self.bot.loop
+                ))
+            except Exception as e:
+                print(f"Şarkı çalınamadı, atlaniyor: {next_song.get('title', '?')} - {e}")
+                # Hatalı şarkıyı atla, sonrakine geç
+                await self.play_next(guild)
 
     @app_commands.command(name="play", description="YouTube'dan müzik çalar veya playlist ekler")
     @app_commands.describe(sarki="YouTube linki, playlist linki veya arama kelimesi")
@@ -205,7 +210,7 @@ class Music(commands.Cog):
         voice_client = interaction.guild.voice_client
 
         if voice_client is None:
-            voice_client = await voice_channel.connect()
+            voice_client = await voice_channel.connect(self_deaf=True)
         elif voice_client.channel != voice_channel:
             await voice_client.move_to(voice_channel)
 
@@ -231,7 +236,7 @@ class Music(commands.Cog):
                     
                     try:
                         song = {
-                            'url': entry['url'],
+                            'url': entry.get('webpage_url') or entry.get('original_url') or entry.get('url'),
                             'title': entry.get('title', 'Bilinmiyor'),
                             'duration': entry.get('duration', 0),
                             'thumbnail': entry.get('thumbnail'),
@@ -285,7 +290,7 @@ class Music(commands.Cog):
                     )
 
                 song = {
-                    'url': data['url'],
+                    'url': data.get('webpage_url') or data.get('original_url') or sarki,
                     'title': data.get('title', 'Bilinmiyor'),
                     'duration': data.get('duration', 0),
                     'thumbnail': data.get('thumbnail'),
